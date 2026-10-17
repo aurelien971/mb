@@ -101,6 +101,9 @@
   .info { grid-column: 2; position: sticky; top: 163px; align-self: start; margin-top: 70px; }
   .gallery { grid-column: 4; display: grid; gap: 9px; }
   .gallery img { width: 100%; aspect-ratio: 300/375; object-fit: contain; display: block; cursor: zoom-in; }
+  /* 3D tile (only when models/<handle>.glb exists) */
+  .model3d { position: relative; width: 100%; aspect-ratio: 300/375; }
+  .model3d .tag { position: absolute; left: 0; top: 0; z-index: 1; font-size: 11px; line-height: 16px; text-transform: uppercase; color: #8a8a8a; pointer-events: none; }
   /* fabric magnifier: shows the photo at its full resolution (1 photo pixel per screen pixel or better) */
   .loupe { position: fixed; z-index: 30; width: 220px; height: 220px; border-radius: 50%; pointer-events: none;
     border: 1px solid rgba(0,0,0,.15); box-shadow: 0 6px 24px rgba(0,0,0,.18); background: #fbfaf9 no-repeat;
@@ -136,7 +139,7 @@
   @media (max-width: 700px) {
     .pdp { display: block; padding-top: 50px; }
     .gallery { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 0; }
-    .gallery img { flex: 0 0 100%; scroll-snap-align: start; }
+    .gallery img, .gallery .model3d { flex: 0 0 100%; scroll-snap-align: start; }
     .info { position: static; margin: 20px; }
     .rail { display: none; }
   }
@@ -160,6 +163,7 @@
 <script type="module">
 import { mountStudsHero } from "./assets/studs-hero.js";
 import { mountPanorama } from "./assets/panorama.js";
+import { mountGarmentViewer } from "./assets/garment-viewer.js";
 // Working-copy catalogue. Ottoman's details come from the live product page;
 // the rest are placeholders until the products CSV export replaces them.
 const PRODUCTS = [
@@ -272,6 +276,22 @@ function product(handle) {
   scrollTo(0, 0);
   updateRail();
   app.querySelectorAll(".gallery img").forEach(magnify);
+  mount3d(p);
+}
+
+// 3D garment from the pattern maker's export: models/<handle>.glb (see models/README.md)
+async function mount3d(p) {
+  const url = `models/${p.handle}.glb`;
+  const ok = await fetch(url, { method: "HEAD" }).then(r => r.ok && !/text\/html/.test(r.headers.get("content-type") || ""), () => false);
+  const gallery = app.querySelector(".gallery");
+  if (!ok || !gallery || !location.hash.endsWith(p.handle)) return;
+  const tile = Object.assign(document.createElement("div"), { className: "model3d" });
+  tile.innerHTML = `<span class="tag">3D · drag to turn · scroll to zoom</span>`;
+  gallery.prepend(tile);
+  let viewer = null, gone = false;
+  destroyHero = () => { gone = true; viewer?.destroy(); };
+  viewer = await mountGarmentViewer(tile, { src: url });
+  if (gone) viewer.destroy();
 }
 
 // --- fabric magnifier -------------------------------------------------------
