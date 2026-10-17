@@ -1,11 +1,2 @@
-# Brand assets and store captures stay out of this public repo.
-# Add them back once the repo is private (or the brand owner OKs publishing).
-product-images/
-reference/
-assets/hero.mp4
-assets/logo.svg
-assets/cones-still.avif
-
-# local tooling
 .claude/
 .DS_Store
