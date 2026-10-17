@@ -8,7 +8,10 @@
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <title>Shop Working Copy</title>
 <style>
-  :root { --paper: #fbfaf9; --ink: #232323; --black: #000; --grey: #808080; --line: #dcdcdc; --red: #e95144; --dot: #fc605b; }
+  :root {
+    --gutter: clamp(24px, 5vw, 80px);
+    --maxw: 1440px;
+    --edge: max(var(--gutter), calc((100vw - var(--maxw)) / 2 + var(--gutter))); --paper: #fbfaf9; --ink: #232323; --black: #000; --grey: #808080; --line: #dcdcdc; --red: #e95144; --dot: #fc605b; }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--paper); color: var(--ink);
     font: 400 14px/22px "SF Pro Display", -apple-system, BlinkMacSystemFont, Arial, sans-serif; }
@@ -22,23 +25,23 @@
   header { position: fixed; top: 0; left: 0; right: 0; z-index: 10; height: 50px; pointer-events: none; }
   header > * { pointer-events: auto; }
   header svg { display: block; }
-  .brand { position: absolute; left: 20px; top: 14px; height: 15px; display: block; }
+  .brand { position: absolute; left: var(--edge); top: 14px; height: 15px; display: block; }
   .brand img { display: block; width: 150px; height: 15px; }
   .links { display: none; }
-  .menu { position: absolute; right: 55px; top: 9px; }
-  .cart { position: absolute; right: 21px; top: 11px; }
+  .menu { position: absolute; right: calc(var(--edge) + 34px); top: 9px; }
+  .cart { position: absolute; right: var(--edge); top: 11px; }
   @media (max-width: 767px) {
     .brand { left: 50%; margin-left: -75px; top: 19px; }
-    .menu { left: 20px; right: auto; top: 13px; }
-    .cart { right: 20px; top: 15px; }
+    .menu { left: var(--edge); right: auto; top: 13px; }
+    .cart { right: var(--edge); top: 15px; }
   }
   @media (min-width: 1025px) {
     .brand { top: 18px; height: 18px; }
     .brand img { width: 170px; height: 18px; }
     .menu { display: none; }
-    .links { display: flex; gap: 14px; position: absolute; right: 73px; top: 15px;
+    .links { display: flex; gap: 14px; position: absolute; right: calc(var(--edge) + 43px); top: 15px;
       font-size: 14px; line-height: 22px; text-transform: uppercase; color: #000; }
-    .cart { right: 30px; top: 14px; }
+    .cart { right: var(--edge); top: 14px; }
   }
   .cart .dot { position: absolute; left: 50%; top: 38px; width: 14px; height: 14px; margin-left: -18px;
     border-radius: 50%; background: var(--dot); }
@@ -64,13 +67,13 @@
   .hero .stage { position: sticky; top: 0; height: 100vh; overflow: hidden; }
   .hero canvas { display: block; width: 100%; height: 100%; }
   .hero .down { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); }
-  .label { text-transform: uppercase; font-size: 14px; font-weight: 400; line-height: 24px; padding: 51px 60px 48px; display: flex; align-items: center; gap: 7px; }
+  .label { text-transform: uppercase; font-size: 14px; font-weight: 400; line-height: 24px; padding: 51px var(--edge) 48px; display: flex; align-items: center; gap: 7px; }
   .label .lock { width: 9px; height: 11px; flex: none; position: relative; top: -1px; }
   /* measured at 850px: cards x30/302/573, 247 wide, rows 416 apart */
   /* smaller cards with room around them, so the 3.5% hover growth never touches a neighbour */
-  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 72px 44px; padding: 0 60px 80px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 72px 44px; padding: 0 var(--edge) 80px; }
   @media (min-width: 1100px) { .grid { grid-template-columns: repeat(4, 1fr); } }
-  @media (max-width: 700px) { .grid { gap: 40px 16px; padding: 0 16px 60px; grid-template-columns: repeat(2, 1fr); } .label { padding: 40px 16px 28px; } }
+  @media (max-width: 700px) { .grid { gap: 40px 16px; padding: 0 var(--edge) 60px; grid-template-columns: repeat(2, 1fr); } .label { padding: 40px var(--edge) 28px; } }
   .card { display: block; transition: transform .3s ease; }
   .card:hover { transform: scale(1.035); }
   .card .img { aspect-ratio: 247/329; position: relative; display: grid; place-items: center; }
@@ -97,14 +100,14 @@
   /* product page — measured at 850px wide:
      info column x20 w405, title y169, price y202, sizes y264, add y313 (405×50),
      gallery x493 w300, images 300×375 starting y93 with 9px gaps */
-  .pdp { display: grid; grid-template-columns: 20fr 405fr 68fr 300fr 57fr; padding-top: 93px; padding-bottom: 80px; }
-  .info { grid-column: 2; position: sticky; top: 163px; align-self: start; margin-top: 70px; }
-  .gallery { grid-column: 4; display: grid; gap: 9px; }
+  .pdp { display: grid; grid-template-columns: 405fr 68fr 300fr; padding: 93px var(--edge) 80px; }
+  .info { grid-column: 1; position: sticky; top: 163px; align-self: start; margin-top: 70px; }
+  .gallery { grid-column: 3; display: grid; gap: 9px; }
   .gallery img { width: 100%; aspect-ratio: 300/375; object-fit: contain; display: block; cursor: zoom-in; }
   /* 3D tile (only when models/<handle>.glb exists) */
   .model3d { position: relative; width: 100%; aspect-ratio: 300/375; }
   /* with a 3D model the viewer is the main view: wider gallery column, tall panel on top */
-  .pdp.has3d { grid-template-columns: 20fr 405fr 40fr 365fr 20fr; }
+  .pdp.has3d { grid-template-columns: 405fr 40fr 365fr; }
   .pdp.has3d .model3d { aspect-ratio: auto; height: calc(100vh - 130px); min-height: 460px; }
   .model3d .tag { position: absolute; left: 0; top: 0; z-index: 1; font-size: 11px; line-height: 16px; text-transform: uppercase; color: #8a8a8a; pointer-events: none; }
   /* fabric magnifier: shows the photo at its full resolution (1 photo pixel per screen pixel or better) */
@@ -146,7 +149,8 @@
     .gallery { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 0; }
     .gallery img, .gallery .model3d { flex: 0 0 100%; scroll-snap-align: start; }
     .pdp.has3d .model3d { height: 70vh; min-height: 0; }
-    .info { position: static; margin: 20px; align-self: stretch; }
+    .pdp { padding-left: 0; padding-right: 0; }
+    .info { position: static; margin: 20px var(--edge); align-self: stretch; }
     .rail { display: none; }
   }
 </style>
