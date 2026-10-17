@@ -103,6 +103,9 @@
   .gallery img { width: 100%; aspect-ratio: 300/375; object-fit: contain; display: block; cursor: zoom-in; }
   /* 3D tile (only when models/<handle>.glb exists) */
   .model3d { position: relative; width: 100%; aspect-ratio: 300/375; }
+  /* with a 3D model the viewer is the main view: wider gallery column, tall panel on top */
+  .pdp.has3d { grid-template-columns: 20fr 405fr 40fr 365fr 20fr; }
+  .pdp.has3d .model3d { aspect-ratio: auto; height: calc(100vh - 130px); min-height: 460px; }
   .model3d .tag { position: absolute; left: 0; top: 0; z-index: 1; font-size: 11px; line-height: 16px; text-transform: uppercase; color: #8a8a8a; pointer-events: none; }
   /* fabric magnifier: shows the photo at its full resolution (1 photo pixel per screen pixel or better) */
   .loupe { position: fixed; z-index: 30; width: 220px; height: 220px; border-radius: 50%; pointer-events: none;
@@ -137,10 +140,13 @@
   .rail i { position: absolute; left: -.5px; width: 2px; background: var(--black); top: 0; }
 
   @media (max-width: 700px) {
-    .pdp { display: block; padding-top: 50px; }
+    /* phones: the main view (3D, or the first photo) comes first, product info below */
+    .pdp { display: flex; flex-direction: column; padding-top: 50px; }
+    .gallery { order: -1; }
     .gallery { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 0; }
     .gallery img, .gallery .model3d { flex: 0 0 100%; scroll-snap-align: start; }
-    .info { position: static; margin: 20px; }
+    .pdp.has3d .model3d { height: 70vh; min-height: 0; }
+    .info { position: static; margin: 20px; align-self: stretch; }
     .rail { display: none; }
   }
 </style>
@@ -288,6 +294,8 @@ async function mount3d(p) {
   const tile = Object.assign(document.createElement("div"), { className: "model3d" });
   tile.innerHTML = `<span class="tag">3D · drag to turn · scroll to zoom</span>`;
   gallery.prepend(tile);
+  app.querySelector(".pdp").classList.add("has3d");
+  updateRail();
   let viewer = null, gone = false;
   destroyHero = () => { gone = true; viewer?.destroy(); };
   viewer = await mountGarmentViewer(tile, { src: url });
