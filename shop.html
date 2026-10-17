@@ -30,10 +30,13 @@
   .hero .stage { position: sticky; top: 0; height: 100vh; overflow: hidden; }
   .hero canvas { display: block; width: 100%; height: 100%; }
   .hero .down { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); }
-  .label { text-transform: uppercase; font-size: 14px; font-weight: 400; line-height: 24px; padding: 51px 20px 62px; }
+  .label { text-transform: uppercase; font-size: 14px; font-weight: 400; line-height: 24px; padding: 51px 60px 48px; display: flex; align-items: center; gap: 7px; }
+  .label .lock { width: 9px; height: 11px; flex: none; position: relative; top: -1px; }
   /* measured at 850px: cards x30/302/573, 247 wide, rows 416 apart */
-  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 45px 24.5px; padding: 0 30px 40px; }
-  @media (max-width: 700px) { .grid { grid-template-columns: repeat(2, 1fr); gap: 0; padding: 0 0 40px; } }
+  /* smaller cards with room around them, so the 3.5% hover growth never touches a neighbour */
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 72px 44px; padding: 0 60px 80px; }
+  @media (min-width: 1100px) { .grid { grid-template-columns: repeat(4, 1fr); } }
+  @media (max-width: 700px) { .grid { gap: 40px 16px; padding: 0 16px 60px; grid-template-columns: repeat(2, 1fr); } .label { padding: 40px 16px 28px; } }
   .card { display: block; transition: transform .3s ease; }
   .card:hover { transform: scale(1.035); }
   .card .img { aspect-ratio: 247/329; position: relative; display: grid; place-items: center; }
@@ -54,7 +57,7 @@
   .card:hover .dots, .card:hover .arrow { opacity: 1; visibility: visible; }
   /* touch screens: dots always on, no hover arrows (they would hang off the screen edge) */
   @media (hover: none) { .dots { opacity: 1; visibility: visible; } .arrow { display: none; } }
-  .card .meta { display: flex; justify-content: space-between; padding-top: 20px; line-height: 22px; text-transform: uppercase; font-size: 14px; color: var(--black); }
+  .card .meta { display: flex; justify-content: space-between; gap: 12px; padding: 16px 4px 0; line-height: 20px; text-transform: uppercase; font-size: 12px; color: var(--black); }
   .missing { color: var(--grey); font-size: 12px; text-transform: uppercase; }
 
   /* product page — measured at 850px wide:
@@ -181,7 +184,7 @@ function home() {
       <div class="stage"><canvas></canvas>
       <svg class="down" width="22" height="18" viewBox="0 0 22 18" fill="none" stroke="#232323" stroke-width="1.2"><path d="M1 1l10 8 10-8M1 9l10 8 10-8"/></svg></div>
     </section>
-    <div class="label">Recently added</div>
+    <div class="label"><svg class="lock" viewBox="0 0 9 11" fill="none" stroke="currentColor" stroke-width="1" aria-label="Locked"><rect x=".5" y="4.5" width="8" height="6"/><path d="M2 4.5V3a2.5 2.5 0 0 1 5 0v1.5"/></svg>Recently added</div>
     <div class="grid">${PRODUCTS.map(cardHTML).join("")}</div>`;
   scrollTo(0, 0);
   destroyHero = mountStudsHero(app.querySelector(".hero"));
