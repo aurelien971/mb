@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shop Working Copy</title>
+<style>
+  :root { --paper: #fbfaf9; --ink: #232323; --black: #000; --grey: #808080; --line: #dcdcdc; --red: #e95144; --dot: #fc605b; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--paper); color: var(--ink);
+    font: 400 14px/22px "SF Pro Display", -apple-system, BlinkMacSystemFont, Arial, sans-serif; }
+  a { color: inherit; text-decoration: none; }
+  button { font: inherit; color: inherit; }
+
+  /* header — logo at x20 y14, 150×15 */
+  header { position: fixed; top: 0; left: 0; right: 0; z-index: 10; height: 43px; pointer-events: none; }
+  header > * { pointer-events: auto; }
+  .brand { position: absolute; left: 20px; top: 14px; height: 15px; display: block; }
+  .brand img { display: block; width: 150px; height: 15px; }
+  .icons { position: absolute; right: 21px; top: 9px; display: flex; gap: 14px; align-items: center; }
+  .icons svg { display: block; }
+  .cart { position: relative; }
+  .cart .dot { position: absolute; left: 50%; top: 38px; width: 14px; height: 14px; margin-left: -18px;
+    border-radius: 50%; background: var(--dot); }
+
+  /* home */
+  /* hero: the visible frame is 100vh on the video's own background (rgb 240,243,240);
+     the extra 120vh is scroll distance for the two flips, during which the frame stays put */
+  .hero { height: 220vh; background: #f0f3f0; position: relative; }
+  .hero .stage { position: sticky; top: 0; height: 100vh; overflow: hidden; }
+  .hero canvas { display: block; width: 100%; height: 100%; }
+  .hero .down { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); }
+  .label { text-transform: uppercase; font-size: 14px; font-weight: 400; line-height: 24px; padding: 51px 20px 62px; }
+  /* measured at 850px: cards x30/302/573, 247 wide, rows 416 apart */
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 45px 24.5px; padding: 0 30px 40px; }
+  @media (max-width: 700px) { .grid { grid-template-columns: repeat(2, 1fr); gap: 0; padding: 0 0 40px; } }
+  .card { display: block; transition: transform .3s ease; }
+  .card:hover { transform: scale(1.035); }
+  .card .img { aspect-ratio: 247/329; position: relative; display: grid; place-items: center; }
+  /* mini slider: photos sit side by side and slide 0.35s; dots + arrows fade in on hover (0.25s) */
+  .slides { position: absolute; inset: 0; overflow: hidden; }
+  .slide { position: absolute; inset: 0; transition: transform .35s, visibility 0s linear .35s; visibility: hidden; }
+  .slide.on { visibility: visible; transition: transform .35s, visibility 0s; }
+  .slide img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .dots { position: absolute; left: 0; top: 0; display: flex; gap: 6.5px; opacity: 0; visibility: hidden; transition: opacity .25s; z-index: 2; }
+  .dots button { width: 6px; height: 6px; padding: 0; border-radius: 50%; cursor: pointer;
+    background: rgba(255,255,255,.7); border: 1px solid rgba(0,0,0,.15); transition: background .2s; }
+  .dots button.on { background: #000; border-color: #000; opacity: .4; }
+  .arrow { position: absolute; top: 50%; width: 29px; height: 29px; margin-top: -14.5px; padding: 0; border: 0; border-radius: 50%;
+    background: none; color: #cbcbcb; cursor: pointer; display: grid; place-items: center;
+    opacity: 0; visibility: hidden; transition: opacity .25s, background .2s; z-index: 2; }
+  .arrow.prev { left: -10px; }
+  .arrow.next { right: -19px; }
+  .card:hover .dots, .card:hover .arrow { opacity: 1; visibility: visible; }
+  /* touch screens: dots always on, no hover arrows (they would hang off the screen edge) */
+  @media (hover: none) { .dots { opacity: 1; visibility: visible; } .arrow { display: none; } }
+  .card .meta { display: flex; justify-content: space-between; padding-top: 20px; line-height: 22px; text-transform: uppercase; font-size: 14px; color: var(--black); }
+  .missing { color: var(--grey); font-size: 12px; text-transform: uppercase; }
+
+  /* product page — measured at 850px wide:
+     info column x20 w405, title y169, price y202, sizes y264, add y313 (405×50),
+     gallery x493 w300, images 300×375 starting y93 with 9px gaps */
+  .pdp { display: grid; grid-template-columns: 20fr 405fr 68fr 300fr 57fr; padding-top: 93px; padding-bottom: 80px; }
+  .info { grid-column: 2; position: sticky; top: 163px; align-self: start; margin-top: 70px; }
+  .gallery { grid-column: 4; display: grid; gap: 9px; }
+  .gallery img { width: 100%; aspect-ratio: 300/375; object-fit: contain; display: block; }
+  .title { font-size: 15px; font-weight: 600; line-height: 30px; text-transform: uppercase; color: var(--black); margin: 0; }
+  .price { font-size: 15px; line-height: 18px; margin-top: 9px; }
+  .size-label { font-size: 14px; font-weight: 500; text-transform: uppercase; margin-top: 18px; padding-left: 2px; }
+  .sizes { display: flex; gap: 10px; margin-top: 4px; }
+  .sizes button { width: 20px; height: 30px; padding: 0; border: 0; background: none; cursor: pointer; position: relative;
+    font-size: 14px; font-weight: 500; color: var(--black); }
+  .sizes button.soldout { color: var(--grey); cursor: default; }
+  .sizes button.soldout::after { content: ""; position: absolute; left: -1px; right: -1px; top: 50%; height: 1px;
+    background: var(--red); transform: rotate(-45deg); }
+  .sizes button[aria-pressed=true] { color: var(--black); }
+  .add { display: block; width: 100%; height: 50px; margin-top: 19px; border: 2px solid var(--black); background: var(--black);
+    color: #fff; font-size: 14px; line-height: 20px; text-transform: uppercase; padding: 13px 15px; cursor: pointer; }
+  .desc { margin: 15px 0 0; font-size: 12px; font-weight: 500; line-height: 22px; text-transform: uppercase; }
+  .desc p { margin: 0; }
+  .acc { margin-top: 28px; }
+  .acc details { border-top: 1px solid var(--line); }
+  .acc summary { list-style: none; display: flex; justify-content: space-between; align-items: center; height: 43px; cursor: pointer;
+    font-size: 12px; font-weight: 500; text-transform: uppercase; }
+  .acc summary::-webkit-details-marker { display: none; }
+  .acc summary svg { transition: transform .2s; }
+  .acc details[open] summary svg { transform: rotate(180deg); }
+  .acc .body { font-size: 12px; line-height: 20px; padding: 0 0 14px; color: var(--ink); }
+  .rail { position: fixed; right: 42px; top: 357px; width: 1px; height: 96px; background: #d4d4d4; }
+  .rail i { position: absolute; left: -.5px; width: 2px; background: var(--black); top: 0; }
+
+  @media (max-width: 700px) {
+    .pdp { display: block; padding-top: 50px; }
+    .gallery { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 0; }
+    .gallery img { flex: 0 0 100%; scroll-snap-align: start; }
+    .info { position: static; margin: 20px; }
+    .rail { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="#/" aria-label="Maxime Black"><img src="assets/logo.svg" alt="Maxime Black" width="150" height="15"></a>
+  <div class="icons">
+    <a href="#/" aria-label="Menu"><svg width="17" height="13" viewBox="0 0 17 13" fill="none" stroke="#000" stroke-width="1.2"><path d="M0 1h17M0 12h17"/></svg></a>
+    <a href="#/" class="cart" aria-label="Cart"><svg width="19" height="20" viewBox="0 0 19 20" fill="none" stroke="#000" stroke-width="1.6"><path d="M1 5.5h17V19H1z"/><path d="M6 5.5V3.5a3.5 3.5 0 0 1 7 0v2"/></svg><span class="dot" hidden></span></a>
+  </div>
+</header>
+<main id="app"></main>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import { mountStudsHero } from "./assets/studs-hero.js";
+// Working-copy catalogue. Ottoman's details come from the live product page;
+// the rest are placeholders until the products CSV export replaces them.
+const PRODUCTS = [
+  { handle: "ottoman", title: "Ottoman", images: ["01.webp", "02.webp"],
+    sizes: [["1", true], ["2", false], ["3", false]],
+    desc: ["Made in London.", "Foam trucker shape.", "Pony hair skull patch.", "Material : 100% acrilic", "Size guide", "One size"] },
+  { handle: "2z-pants",                title: "2Z Pants",                images: ["01.png"] },
+  { handle: "teddy-jacket",            title: "Teddy Jacket",            images: ["01.webp", "02.webp"] },
+  { handle: "spectre-overshirt",       title: "Spectre Overshirt",       images: ["01.webp", "02.webp"] },
+  { handle: "phantom-pants",           title: "Phantom Pants",           images: ["01.webp", "02.png"] },
+  { handle: "hooded-cardigan-in-wool", title: "Hooded Cardigan in Wool", images: ["01.webp", "02.webp", "03.webp"] },
+  { handle: "clone-pants",             title: "Clone Pants",             images: [] },
+  { handle: "z2-top",                  title: "2Z Top",                  images: [] },
+].map(p => ({ price: 0, sizes: [["1", true], ["2", true], ["3", true]], desc: ["Description placeholder"], ...p }));
+
+const ACCORDIONS = ["Material", "Size guide", "Shipping and return"];
+const CHEVRON = `<svg width="18" height="10" viewBox="0 0 18 10" fill="none" stroke="#232323" stroke-width="1.4"><path d="M1 1l8 8 8-8"/></svg>`;
+const src = (p, f) => `product-images/${p.handle}/${f}`;
+const gbp = n => "£" + n.toFixed(2);
+const app = document.getElementById("app");
+const cart = [];
+
+const CHEV = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M6 3l5 5-5 5"/></svg>`;
+
+function cardHTML(p) {
+  const n = p.images.length;
+  const gallery = !n ? `<span class="missing">Image needed</span>` : `
+    <div class="slides">${p.images.map((f, i) =>
+      `<div class="slide${i ? "" : " on"}" style="transform:translateX(${i * 100}%)"><img src="${src(p, f)}" alt="${i ? "" : p.title}" loading="lazy"></div>`).join("")}</div>
+    ${n > 1 ? `
+      <div class="dots">${p.images.map((_, i) => `<button class="${i ? "" : "on"}" data-go="${i}" aria-label="Image ${i + 1}"></button>`).join("")}</div>
+      <button class="arrow prev" data-step="-1" aria-label="Previous image" style="transform:rotate(180deg)">${CHEV}</button>
+      <button class="arrow next" data-step="1" aria-label="Next image">${CHEV}</button>` : ""}`;
+  return `<a class="card" href="#/products/${p.handle}" data-i="0" data-n="${n}">
+    <div class="img">${gallery}</div>
+    <div class="meta"><span>${p.title}</span><span>${gbp(p.price)}</span></div>
+  </a>`;
+}
+
+function showSlide(card, i) {
+  const n = +card.dataset.n;
+  i = (i + n) % n;
+  card.dataset.i = i;
+  card.querySelectorAll(".slide").forEach((s, k) => {
+    s.style.transform = `translateX(${(k - i) * 100}%)`;
+    s.classList.toggle("on", k === i);
+  });
+  card.querySelectorAll(".dots button").forEach((d, k) => d.classList.toggle("on", k === i));
+}
+
+// arrows and dots change the photo without opening the product
+app.addEventListener("click", e => {
+  const ctl = e.target.closest(".arrow, .dots button");
+  if (!ctl) return;
+  e.preventDefault();
+  const card = ctl.closest(".card");
+  showSlide(card, ctl.dataset.go != null ? +ctl.dataset.go : +card.dataset.i + +ctl.dataset.step);
+});
+
+function home() {
+  app.innerHTML = `
+    <section class="hero">
+      <div class="stage"><canvas></canvas>
+      <svg class="down" width="22" height="18" viewBox="0 0 22 18" fill="none" stroke="#232323" stroke-width="1.2"><path d="M1 1l10 8 10-8M1 9l10 8 10-8"/></svg></div>
+    </section>
+    <div class="label">Recently added</div>
+    <div class="grid">${PRODUCTS.map(cardHTML).join("")}</div>`;
+  scrollTo(0, 0);
+  destroyHero = mountStudsHero(app.querySelector(".hero"));
+}
+
+function product(handle) {
+  const p = PRODUCTS.find(x => x.handle === handle);
+  if (!p) return home();
+  let selected = (p.sizes.find(([, ok]) => ok) || [""])[0];
+  app.innerHTML = `
+    <div class="pdp">
+      <div class="info">
+        <h1 class="title">${p.title}</h1>
+        <div class="price">${gbp(p.price)}</div>
+        <div class="size-label">Size: <span id="sel">${selected}</span></div>
+        <div class="sizes">${p.sizes.map(([s, ok]) =>
+          `<button class="${ok ? "" : "soldout"}" ${ok ? "" : "disabled"} aria-pressed="${s === selected}">${s}</button>`).join("")}</div>
+        <button class="add">Add to cart</button>
+        <div class="desc">${p.desc.map(l => `<p>${l}</p>`).join("")}</div>
+        <div class="acc">${ACCORDIONS.map(a =>
+          `<details><summary>${a}${CHEVRON}</summary><div class="body">Placeholder until the real content is in.</div></details>`).join("")}</div>
+      </div>
+      <div class="gallery">${p.images.map(f => `<img src="${src(p, f)}" alt="${p.title}">`).join("")
+        || `<div class="card"><div class="img"><span class="missing">Image needed</span></div></div>`}</div>
+    </div>
+    <div class="rail"><i></i></div>`;
+  app.querySelectorAll(".sizes button:not(.soldout)").forEach(b => b.onclick = () => {
+    selected = b.textContent;
+    document.getElementById("sel").textContent = selected;
+    app.querySelectorAll(".sizes button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  });
+  app.querySelector(".add").onclick = () => { cart.push([p.handle, selected]); document.querySelector(".cart .dot").hidden = false; };
+  scrollTo(0, 0);
+  updateRail();
+}
+
+// gallery progress rail on the right edge
+function updateRail() {
+  const rail = document.querySelector(".rail i"), g = document.querySelector(".gallery");
+  if (!rail || !g) return;
+  const max = Math.max(1, g.offsetHeight - innerHeight + 93);
+  const frac = Math.min(1, innerHeight / (g.offsetHeight + 93));
+  rail.style.height = (96 * frac) + "px";
+  rail.style.top = (96 * (1 - frac) * Math.min(1, scrollY / max)) + "px";
+}
+addEventListener("scroll", updateRail, { passive: true });
+addEventListener("resize", updateRail);
+
+let destroyHero = null;
+function route() {
+  destroyHero?.(); destroyHero = null;
+  const m = location.hash.match(/^#\/products\/(.+)$/);
+  m ? product(m[1]) : home();
+}
+addEventListener("hashchange", route);
+route();
+</script>
+</body>
+</html>

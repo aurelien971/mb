@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brass Studs Scroll</title>
+<style>
+  :root { --paper: #fbfaf9; --ink: #232323; }
+  html, body { margin: 0; background: var(--paper); color: var(--ink);
+    font: 500 12px/22px "SF Pro Display", -apple-system, BlinkMacSystemFont, Arial, sans-serif; text-transform: uppercase; }
+  /* the section is tall; the stage sticks while you scroll through it */
+  .studs { position: relative; height: 400vh; }
+  .stage { position: sticky; top: 0; height: 100vh; overflow: hidden; }
+  .stage canvas { display: block; width: 100%; height: 100%; }
+  .caption { position: absolute; left: 0; right: 0; bottom: 28px; text-align: center; letter-spacing: .08em; transition: opacity .3s; }
+  .spacer { height: 60vh; display: grid; place-items: center; color: #8a8a8a; }
+</style>
+</head>
+<body>
+<div class="spacer">↓ scroll</div>
+<section class="studs" id="studs">
+  <div class="stage">
+    <canvas id="c"></canvas>
+    <div class="caption" id="caption">Top view</div>
+  </div>
+</section>
+<div class="spacer">end of section</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+// ---- part dimensions from the spec sheet (mm) ----
+const R = 13.5 / 2;      // outer radius
+const BASE_H = 4;        // straight cylinder
+const TOTAL_H = 8;       // to the tip
+const HOLE_R = 1.2;      // threaded hole underneath
+const HOLE_DEPTH = 3;
+const CH = 0.18;         // tiny edge chamfers that catch the light
+
+const canvas = document.getElementById("c");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.03).texture;
+
+const camera = new THREE.PerspectiveCamera(22, 1, 1, 500);
+camera.position.set(0, 0, 80);
+
+// ---- brushed texture: fine streaks along the lathe's U (around the axis),
+// so the cone and discs get concentric rings and the wall gets horizontal bands
+function brushedTexture() {
+  const c = document.createElement("canvas");
+  c.width = 16; c.height = 1024;
+  const g = c.getContext("2d");
+  for (let y = 0; y < c.height; y++) {
+    const v = 150 + Math.random() * 70 + Math.sin(y * 0.07) * 10;
+    g.fillStyle = `rgb(${v},${v},${v})`;
+    g.fillRect(0, y, c.width, 1);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.NoColorSpace;
+  return t;
+}
+const streaks = brushedTexture();
+
+const brass = new THREE.MeshPhysicalMaterial({
+  color: 0xd9ad55,
+  metalness: 1,
+  roughness: 0.32,
+  roughnessMap: streaks,
+  anisotropy: 0.75,            // stretches highlights around the axis, like real lathe brushing
+  anisotropyRotation: 0,
+  clearcoat: 0.15,
+  clearcoatRoughness: 0.35,
+});
+const holeMat = brass.clone();
+holeMat.color = new THREE.Color(0x6e5320);
+holeMat.roughness = 0.5;
+
+// one lathe per face so the edges stay crisp (a single lathe smooths the normals across corners)
+function face(points, mat = brass, steps = 24) {
+  const pts = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const [a, b] = [points[i], points[i + 1]];
+    for (let s = 0; s < steps; s++) pts.push(new THREE.Vector2(...a).lerp(new THREE.Vector2(...b), s / steps));
+  }
+  pts.push(new THREE.Vector2(...points.at(-1)));
+  const geo = new THREE.LatheGeometry(pts, 192);
+  geo.computeTangents();
+  return new THREE.Mesh(geo, mat);
+}
+
+function makeStud() {
+  const g = new THREE.Group();
+  g.add(face([[HOLE_R, 0], [R - CH, 0]]));                                   // underside
+  g.add(face([[R - CH, 0], [R, CH]], brass, 4));                            // bottom chamfer
+  g.add(face([[R, CH], [R, BASE_H - CH]]));                                 // cylinder wall
+  g.add(face([[R, BASE_H - CH], [R - CH * 0.6, BASE_H]], brass, 4));         // shoulder
+  g.add(face([[R - CH * 0.6, BASE_H], [0.0001, TOTAL_H]], brass, 48));      // cone
+  g.add(face([[HOLE_R, HOLE_DEPTH], [HOLE_R, 0]], holeMat, 8));             // hole wall
+  g.add(face([[0.0001, HOLE_DEPTH], [HOLE_R, HOLE_DEPTH]], holeMat, 4));    // hole floor
+  g.children.forEach(m => { m.position.y = -TOTAL_H / 2; });               // spin around the middle
+  return g;
+}
+
+const pair = new THREE.Group();
+const studs = [makeStud(), makeStud()];
+studs.forEach((s, i) => { s.position.x = (i ? 1 : -1) * R * 1.7; pair.add(s); });
+scene.add(pair);
+
+// soft contact shadow under each stud for the side views
+const shadowTex = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 128;
+  const g = c.getContext("2d");
+  const grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grd.addColorStop(0, "rgba(0,0,0,.35)"); grd.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(c);
+})();
+const shadows = studs.map(s => {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(R * 3, R * 1.1),
+    new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false }));
+  scene.add(m);
+  return m;
+});
+
+// ---- scroll choreography ----
+// 0.00 top view (tip at camera, matches the dithered hero)
+// 0.35 tilts down to a 3/4 view
+// 0.65 side view, spinning
+// 1.00 rolls over to show the underside and hole
+const KEYS = [
+  { p: 0.00, tilt: Math.PI / 2, label: "Top view" },
+  { p: 0.35, tilt: 0.55,        label: "Isometric view" },
+  { p: 0.65, tilt: 0.12,        label: "Side view" },
+  { p: 1.00, tilt: -Math.PI / 2 + 0.35, label: "Bottom view" },
+];
+const ease = t => t * t * (3 - 2 * t);
+function tiltAt(p) {
+  for (let i = 0; i < KEYS.length - 1; i++) {
+    const a = KEYS[i], b = KEYS[i + 1];
+    if (p <= b.p) return a.tilt + (b.tilt - a.tilt) * ease((p - a.p) / (b.p - a.p));
+  }
+  return KEYS.at(-1).tilt;
+}
+
+const section = document.getElementById("studs");
+const caption = document.getElementById("caption");
+let target = 0, current = 0;
+function readScroll() {
+  const r = section.getBoundingClientRect();
+  target = THREE.MathUtils.clamp(-r.top / (r.height - innerHeight), 0, 1);
+}
+addEventListener("scroll", readScroll, { passive: true });
+
+function resize() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  // keep both studs in frame on narrow screens
+  // fit the pair (about ±20mm wide, ±12mm tall) with a margin, whatever the screen shape
+  const t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  camera.position.z = Math.max(12 / t, 21 / (t * camera.aspect)) * 1.15;
+  camera.updateProjectionMatrix();
+}
+addEventListener("resize", resize);
+
+function frame() {
+  current += (target - current) * 0.08;          // smooth follow so it glides after the wheel stops
+  const tilt = tiltAt(current);
+  studs.forEach((s, i) => {
+    s.rotation.x = tilt;
+    s.rotation.y = current * Math.PI * 3 + i * 0.4;   // spin around the stud's own axis
+  });
+  pair.rotation.z = Math.sin(current * Math.PI) * 0.06;
+  // shadows only show once the studs stand upright
+  const upright = tilt > 0 ? 1 - Math.min(1, tilt / 1.2) : 0;   // none once it rolls past side-on
+  shadows.forEach((m, i) => {
+    m.position.set(studs[i].position.x, -TOTAL_H / 2 - 0.4, -2);
+    m.material.opacity = upright;
+    m.visible = upright > 0.01;
+  });
+  const key = [...KEYS].reverse().find(k => current >= k.p - 0.12) || KEYS[0];
+  if (caption.textContent !== key.label) caption.textContent = key.label;
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+
+resize(); readScroll(); frame();
+</script>
+</body>
+</html>

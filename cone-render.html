@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dithered Cone Render</title>
+<style>
+  :root { --paper: #f3f3f1; --ink: #0a0a0a; --ui: rgba(10,10,10,.55); }
+  html, body { margin: 0; height: 100%; background: var(--paper); overflow: hidden;
+    font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--ink); }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  #panel { position: fixed; right: 16px; bottom: 16px; background: rgba(243,243,241,.92);
+    border: 1px solid rgba(0,0,0,.12); padding: 10px 12px; display: grid; gap: 6px; min-width: 220px; }
+  #panel label { display: grid; grid-template-columns: 80px 1fr; align-items: center; gap: 8px; color: var(--ui); }
+  #panel select, #panel input { width: 100%; }
+  #panel button { font: inherit; padding: 4px; cursor: pointer; }
+  #toggle { position: fixed; right: 16px; top: 16px; font: inherit; background: none; border: 0;
+    color: var(--ui); cursor: pointer; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<button id="toggle">controls</button>
+<div id="panel" class="hidden">
+  <label>spin <select id="mode">
+    <option value="light" selected>orbiting light</option>
+    <option value="turntable">turntable (coin)</option>
+    <option value="axis">around own axis</option>
+    <option value="wobble">wobble</option>
+  </select></label>
+  <label>speed <input id="speed" type="range" min="0" max="3" step="0.05" value="0.8"></label>
+  <label>tilt <input id="tilt" type="range" min="0" max="90" step="1" value="0"></label>
+  <label>grain <input id="grain" type="range" min="1" max="4" step="1" value="2"></label>
+  <label>contrast <input id="contrast" type="range" min="0.5" max="3" step="0.05" value="0.85"></label>
+  <label>count <select id="count"><option>1</option><option selected>2</option><option>3</option></select></label>
+  <label>material <select id="mat"><option value="dither" selected>dither</option><option value="brass">brass (raw)</option></select></label>
+  <button id="snap">save PNG</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// Part geometry from the spec sheet (size large), in mm:
+// Ø13.5, 4mm cylindrical base, 8mm total height → 4mm cone tip. Small centre hole.
+const D = 13.5, BASE_H = 4, TOTAL_H = 8, HOLE_D = 1.6;
+const R = D / 2, TIP_H = TOTAL_H - BASE_H;
+
+const $ = id => document.getElementById(id);
+const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+
+// --- the part (lathe profile so the hole and edges are exact) ---
+function partGeometry() {
+  const r = HOLE_D / 2, pts = [];
+  pts.push(new THREE.Vector2(r, 0));          // hole at bottom
+  pts.push(new THREE.Vector2(R, 0));          // underside
+  pts.push(new THREE.Vector2(R, BASE_H));     // cylinder wall
+  pts.push(new THREE.Vector2(0.001, TOTAL_H)); // cone tip
+  const g = new THREE.LatheGeometry(pts, 160);
+  g.translate(0, -TOTAL_H / 2, 0);
+  return g;
+}
+const geo = partGeometry();
+const ditherMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, metalness: 0.0, flatShading: false });
+const brassMat = new THREE.MeshStandardMaterial({ color: 0xc9a24a, roughness: 0.32, metalness: 1.0 });
+
+const parts = new THREE.Group();
+scene.add(parts);
+
+// --- lighting: key from lower-right so the upper-left falls dark, like the reference ---
+const key = new THREE.DirectionalLight(0xffffff, 1.6);
+const fill = new THREE.AmbientLight(0xffffff, 0.35);
+scene.add(key, fill);
+// simple env for raw brass mode
+const pmrem = new THREE.PMREMGenerator(renderer);
+const envScene = new THREE.Scene();
+envScene.background = new THREE.Color(0x888888);
+const envLight = new THREE.Mesh(new THREE.SphereGeometry(5, 16, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+envLight.position.set(10, -10, 10); envScene.add(envLight);
+const envTex = pmrem.fromScene(envScene).texture;
+
+function build(n) {
+  parts.clear();
+  const gap = D * 1.55;
+  for (let i = 0; i < n; i++) {
+    const pivot = new THREE.Group();   // handles tilt + turntable
+    const m = new THREE.Mesh(geo, $('mat').value === 'brass' ? brassMat : ditherMat);
+    m.rotation.x = Math.PI / 2;        // tip points at camera (top-down view)
+    pivot.add(m);
+    pivot.position.x = (i - (n - 1) / 2) * gap;
+    pivot.userData.mesh = m;
+    parts.add(pivot);
+  }
+}
+
+// --- dither post pass: render scene to a target, then stochastic stipple ---
+let rt;
+const post = new THREE.ShaderMaterial({
+  uniforms: {
+    tScene: { value: null }, uRes: { value: new THREE.Vector2() },
+    uGrain: { value: 2 }, uContrast: { value: 1.4 }, uSeed: { value: 0 },
+    uPaper: { value: new THREE.Color(0xf3f3f1) }, uInk: { value: new THREE.Color(0x0a0a0a) },
+    uRaw: { value: 0 }
+  },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }`,
+  fragmentShader: `
+    uniform sampler2D tScene; uniform vec2 uRes; uniform float uGrain, uContrast, uSeed, uRaw;
+    uniform vec3 uPaper, uInk; varying vec2 vUv;
+    float hash(vec2 p){ p = fract(p * vec2(443.897, 441.423)); p += dot(p, p.yx + 19.19); return fract((p.x + p.y) * p.x); }
+    void main(){
+      vec2 cell = floor(gl_FragCoord.xy / uGrain);
+      vec2 uv = (cell + .5) * uGrain / uRes;
+      vec4 s = texture2D(tScene, uv);
+      if (uRaw > .5) { gl_FragColor = vec4(mix(uPaper, s.rgb, s.a), 1.); return; }
+      if (s.a < .5) { gl_FragColor = vec4(uPaper, 1.); return; }
+      float l = dot(s.rgb, vec3(.299, .587, .114));
+      l = clamp(pow(l, uContrast) * 1.08, 0., 1.);
+      float t = hash(cell + uSeed);            // white-noise threshold = stipple
+      gl_FragColor = vec4(l > t ? uPaper : uInk, 1.);
+    }`,
+  depthTest: false, depthWrite: false
+});
+const postScene = new THREE.Scene();
+const postCam = new THREE.Camera();
+postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), post));
+
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h);
+  rt?.dispose();
+  rt = new THREE.WebGLRenderTarget(w, h, { format: THREE.RGBAFormat });
+  post.uniforms.tScene.value = rt.texture;
+  post.uniforms.uRes.value.set(w, h);
+  // frame the parts: ~ reference proportions (each disc ≈ 21% of width)
+  const n = parts.children.length || 2;
+  const halfW = Math.max((n * D * 1.55) / 2 + D * 0.9, (D * 1.6) * (w / h) / 2);
+  const halfH = halfW * h / w;
+  Object.assign(camera, { left: -halfW, right: halfW, top: halfH, bottom: -halfH });
+  camera.position.set(0, 0, 50); camera.lookAt(0, 0, 0);
+  camera.updateProjectionMatrix();
+}
+
+const clock = new THREE.Clock();
+let t = 0;
+function frame() {
+  const dt = clock.getDelta();
+  t += dt * parseFloat($('speed').value);
+  const mode = $('mode').value, tilt = THREE.MathUtils.degToRad(+$('tilt').value);
+  let lightAng = -Math.PI / 4;  // from lower-right
+  parts.children.forEach((p, i) => {
+    const m = p.userData.mesh, ph = i * 0.6;
+    p.rotation.set(0, 0, 0); m.rotation.set(Math.PI / 2, 0, 0);
+    if (mode === 'turntable') p.rotation.y = t * 1.6 + ph;
+    if (mode === 'axis') m.rotation.y = t * 2 + ph;
+    if (mode === 'wobble') { p.rotation.x = Math.sin(t * 2 + ph) * 0.45; p.rotation.y = Math.cos(t * 2 + ph) * 0.45; }
+    p.rotation.x += tilt;
+  });
+  if (mode === 'light') lightAng = -t * 1.5;
+  key.position.set(Math.cos(lightAng) * 10, Math.sin(lightAng) * 10, 3);
+
+  const raw = $('mat').value === 'brass';
+  scene.environment = raw ? envTex : null;
+  post.uniforms.uRaw.value = raw ? 1 : 0;
+  post.uniforms.uGrain.value = +$('grain').value;
+  post.uniforms.uContrast.value = +$('contrast').value;
+  post.uniforms.uSeed.value = 0;               // static grain; set to t for "boiling" film grain
+
+  renderer.setClearColor(0x000000, 0);
+  renderer.setRenderTarget(rt); renderer.clear(); renderer.render(scene, camera);
+  renderer.setRenderTarget(null); renderer.render(postScene, postCam);
+  requestAnimationFrame(frame);
+}
+
+$('toggle').onclick = () => $('panel').classList.toggle('hidden');
+$('count').onchange = () => { build(+$('count').value); resize(); };
+$('mat').onchange = () => build(+$('count').value);
+$('snap').onclick = () => { const a = document.createElement('a'); a.download = 'cone.png'; a.href = renderer.domElement.toDataURL('image/png'); a.click(); };
+addEventListener('resize', resize);
+
+build(2); resize(); frame();
+</script>
+</body>
+</html>
